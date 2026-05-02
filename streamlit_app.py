@@ -35,6 +35,13 @@ st.markdown("""
 }
 .stMetric label { font-size: 12px; color: #718096; }
 div[data-testid="stSidebarContent"] { padding-top: 1rem; }
+
+/* Streamlit 하단 브랜딩 제거 */
+#MainMenu        { visibility: hidden; }
+footer           { visibility: hidden; }
+[data-testid="stToolbar"]      { visibility: hidden; }
+[data-testid="stDecoration"]   { display: none; }
+[data-testid="stStatusWidget"] { visibility: hidden; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -344,43 +351,66 @@ with st.sidebar:
         st.info("데이터가 없습니다.")
         st.stop()
 
-    mom_map = dict(zip(summary_df["sheet_name"], summary_df["mom"]))
-    search = st.text_input("🔍 종목 검색", placeholder="HBM, 양극재, MLCC…")
-    items_df = load_items()
-    all_names = items_df["sheet_name"].tolist()
+    items_df  = load_items()
+    mom_map   = dict(zip(summary_df["sheet_name"], summary_df["mom"]))
+    co_map    = dict(zip(items_df["sheet_name"], items_df["company"].fillna("")))
 
-    if search:
-        names = [
-            n for n in all_names
-            if search.lower() in n.lower()
-            or search.lower() in str(
-                items_df.loc[items_df["sheet_name"] == n, "company"].values[0] or ""
-            ).lower()
-        ]
-    else:
-        names = all_names
-
-    def item_label(n):
-        mom = mom_map.get(n)
-        icon = mom_icon(mom)
-        pct  = f" {fmt_pct(mom)}" if mom is not None and not pd.isna(mom) else ""
-        return f"{icon}{pct}  {n}"
+    # 전체 옵션 목록: (표시 레이블, 실제 sheet_name) 쌍으로 구성
+    def make_options(name_list):
+        opts = []
+        for n in name_list:
+            mom  = mom_map.get(n)
+            icon = mom_icon(mom)
+            pct  = f"{fmt_pct(mom)}" if mom is not None and not pd.isna(mom) else "  -  "
+            co   = co_map.get(n, "")
+            co_str = f"  [{co}]" if co else ""
+            opts.append((f"{icon} {pct}  {n}{co_str}", n))
+        return opts
 
     selected_item = None
+
     if view == "🔍 종목별 상세":
-        if not names:
+        st.markdown(
+            "<p style='font-size:12px; color:#718096; margin-bottom:4px;'>종목 검색 · 선택</p>",
+            unsafe_allow_html=True,
+        )
+        # 검색어로 실시간 필터
+        keyword = st.text_input(
+            "검색", placeholder="종목명 또는 기업명 입력…",
+            label_visibility="collapsed",
+            key="item_search",
+        )
+        kw = keyword.strip().lower()
+        filtered = [
+            n for n in items_df["sheet_name"].tolist()
+            if kw in n.lower() or kw in co_map.get(n, "").lower()
+        ] if kw else items_df["sheet_name"].tolist()
+
+        if not filtered:
             st.warning("검색 결과 없음")
         else:
-            pick = st.selectbox(
-                "종목 선택", names,
-                format_func=item_label,
+            opts = make_options(filtered)
+            labels = [o[0] for o in opts]
+            values = [o[1] for o in opts]
+
+            # 이전에 선택된 항목을 기본값으로 유지
+            prev = st.session_state.get("selected")
+            default_idx = values.index(prev) if prev in values else 0
+
+            pick_idx = st.selectbox(
+                "종목 선택",
+                range(len(labels)),
+                format_func=lambda i: labels[i],
+                index=default_idx,
                 label_visibility="collapsed",
             )
-            if pick:
-                selected_item = pick
-                st.session_state["selected"] = pick
-        if selected_item is None:
-            selected_item = st.session_state.get("selected")
+            selected_item = values[pick_idx]
+            st.session_state["selected"] = selected_item
+
+            # 선택된 종목 기업명 표시
+            co = co_map.get(selected_item, "")
+            if co:
+                st.caption(f"🏢 {co}")
 
 
 # ─── 전체 현황 ────────────────────────────────────────────────────────────────
