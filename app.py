@@ -37,14 +37,19 @@ st.markdown("""
 div[data-testid="stSidebarContent"] { padding-top: 1rem; }
 
 /* Streamlit 하단 브랜딩 완전 제거 */
-#MainMenu                        { visibility: hidden; }
-footer                           { visibility: hidden; }
-header                           { visibility: hidden; }
-[data-testid="stToolbar"]        { display: none !important; }
-[data-testid="stDecoration"]     { display: none !important; }
-[data-testid="stStatusWidget"]   { display: none !important; }
-[class*="viewerBadge"]           { display: none !important; }
-[class*="styles_viewerBadge"]    { display: none !important; }
+#MainMenu                              { visibility: hidden !important; }
+footer                                 { visibility: hidden !important; }
+header                                 { visibility: hidden !important; }
+[data-testid="stToolbar"]              { display: none !important; }
+[data-testid="stDecoration"]           { display: none !important; }
+[data-testid="stStatusWidget"]         { display: none !important; }
+[data-testid="manage-app-button"]      { display: none !important; }
+[data-testid="stAppViewerBadge"]       { display: none !important; }
+[class*="viewerBadge"]                 { display: none !important; }
+[class*="styles_viewerBadge"]          { display: none !important; }
+[class*="badge_container"]             { display: none !important; }
+a[href="https://streamlit.io/cloud"]   { display: none !important; }
+a[href*="streamlit.io"]                { display: none !important; }
 </style>
 """, unsafe_allow_html=True)
 
