@@ -2,12 +2,14 @@
 수출 통계 모니터링 대시보드
 실행: streamlit run app.py
 """
+import io
 import sqlite3
 import subprocess
 import sys
 from pathlib import Path
 from datetime import date, datetime
 
+import openpyxl
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -355,7 +357,7 @@ with st.sidebar:
 
     view = st.radio(
         "보기 모드",
-        ["📋 전체 현황", "🔍 종목별 상세", "📈 4개월 성장 분석"],
+        ["📋 전체 현황", "🔍 종목별 상세", "📈 4개월 성장 분석", "📝 Excel 편집"],
         label_visibility="collapsed",
     )
     st.divider()
@@ -1280,3 +1282,221 @@ elif view == "📈 4개월 성장 분석":
         file_name=f"4m_growth_{date.today()}.csv",
         mime="text/csv",
     )
+
+
+# ─── Excel 편집 ───────────────────────────────────────────────────────────────
+
+elif view == "📝 Excel 편집":
+    from excel_editor import (
+        add_monthly_row, add_quarter_row,
+        parse_kita_file, add_new_sheet,
+    )
+
+    st.title("📝 수출 정리 Excel 편집")
+    st.caption("업로드 → 편집 → 다운로드  (파일은 서버에 저장되지 않습니다)")
+
+    tab_add, tab_new = st.tabs(["➕ 기존 시트 — 월 행 추가", "📄 새 시트 추가"])
+
+    # ── Tab 1: 기존 시트 월 행 추가 ──────────────────────────────────────────
+    with tab_add:
+        xl_file = st.file_uploader(
+            "수출 정리 Excel 파일 업로드",
+            type=["xlsx"],
+            key="xl_monthly",
+        )
+        if xl_file is None:
+            st.info("Excel 파일을 업로드하세요.")
+        else:
+            xl_bytes = xl_file.read()
+            wb_ro = openpyxl.load_workbook(io.BytesIO(xl_bytes), read_only=True)
+            sheet_names = wb_ro.sheetnames[1:]
+            wb_ro.close()
+
+            target_sheet = st.selectbox("편집할 시트 선택", sheet_names, key="sel_sheet")
+
+            st.divider()
+            st.subheader("신규 데이터 입력")
+
+            kita_file = st.file_uploader(
+                "관세청/KITA 파일 업로드 (Excel/CSV) — 선택 사항",
+                type=["xlsx", "xls", "csv"],
+                key="kita_file",
+            )
+
+            parsed = None
+            if kita_file is not None:
+                parsed = parse_kita_file(kita_file.read(), kita_file.name)
+                if parsed:
+                    won_str    = f"{parsed['won']:,.0f}"    if parsed.get("won")    else "-"
+                    weight_str = f"{parsed['weight']:,.0f}" if parsed.get("weight") else "-"
+                    st.success(
+                        f"자동 파싱 완료 — {parsed['period']}  |  "
+                        f"달러: {parsed['dollar']:,.0f}  |  "
+                        f"원화: {won_str}  |  중량: {weight_str}"
+                    )
+                else:
+                    st.warning("파일을 파싱하지 못했습니다. 아래에 직접 입력하세요.")
+
+            c1, c2, c3, c4, c5 = st.columns(5)
+            period = c1.text_input(
+                "기간 (예: 2025년05월)",
+                value=parsed["period"] if parsed else "",
+                key="period_input",
+            )
+            dollar = c2.number_input(
+                "수출액(달러)",
+                min_value=0.0,
+                value=float(parsed["dollar"] or 0) if parsed and parsed.get("dollar") else 0.0,
+                format="%.0f", step=1_000_000.0, key="dollar_input",
+            )
+            won = c3.number_input(
+                "수출액(원화)",
+                min_value=0.0,
+                value=float(parsed["won"] or 0) if parsed and parsed.get("won") else 0.0,
+                format="%.0f", step=1_000_000_000.0, key="won_input",
+            )
+            weight = c4.number_input(
+                "중량(kg)",
+                min_value=0.0,
+                value=float(parsed["weight"] or 0) if parsed and parsed.get("weight") else 0.0,
+                format="%.0f", step=1_000.0, key="weight_input",
+            )
+            workdays = c5.number_input(
+                "영업일수",
+                min_value=0, max_value=31,
+                value=int(parsed["workdays"] or 0) if parsed and parsed.get("workdays") else 0,
+                step=1, key="workdays_input",
+            )
+
+            if st.button("✅ 행 추가 및 파일 생성", type="primary", key="btn_add"):
+                if not period.strip():
+                    st.error("기간을 입력하세요.")
+                else:
+                    try:
+                        wb2 = openpyxl.load_workbook(io.BytesIO(xl_bytes))
+                        new_row, is_qend = add_monthly_row(
+                            wb2, target_sheet, period.strip(),
+                            dollar=dollar, won=won, weight=weight,
+                            workdays=workdays if workdays > 0 else None,
+                        )
+                        q_row = None
+                        if is_qend:
+                            q_row = add_quarter_row(wb2, target_sheet, new_row)
+
+                        out = io.BytesIO()
+                        wb2.save(out)
+                        out.seek(0)
+
+                        msg = f"✅ [{target_sheet}] {new_row}행에 {period.strip()} 추가 완료"
+                        if q_row:
+                            msg += f"  |  {q_row}행에 분기 집계 행 추가"
+                        st.success(msg)
+                        st.download_button(
+                            "⬇️ 수정된 Excel 다운로드",
+                            data=out,
+                            file_name=xl_file.name,
+                            mime=(
+                                "application/vnd.openxmlformats-"
+                                "officedocument.spreadsheetml.sheet"
+                            ),
+                            key="dl_monthly",
+                        )
+                    except Exception as e:
+                        st.error(f"오류 발생: {e}")
+
+    # ── Tab 2: 새 시트 추가 ───────────────────────────────────────────────────
+    with tab_new:
+        xl_file2 = st.file_uploader(
+            "수출 정리 Excel 파일 업로드",
+            type=["xlsx"],
+            key="xl_new_sheet",
+        )
+        if xl_file2 is None:
+            st.info("Excel 파일을 업로드하세요.")
+        else:
+            xl_bytes2 = xl_file2.read()
+            wb_ro2 = openpyxl.load_workbook(io.BytesIO(xl_bytes2), read_only=True)
+            sheet_names2 = wb_ro2.sheetnames[1:]
+            wb_ro2.close()
+
+            c_a, c_b, c_c, c_d = st.columns(4)
+            new_sheet_name = c_a.text_input("새 시트명 (품목명)", key="new_sheet_name")
+            company        = c_b.text_input("기업명", key="new_company")
+            hs_code        = c_c.text_input("HS 코드", key="new_hs")
+            template_sheet = c_d.selectbox("템플릿 시트", sheet_names2, key="tmpl")
+
+            st.divider()
+            st.caption(
+                "📎 데이터 CSV 업로드 — 필수 컬럼: `period` (예: 2025년05월), `dollar`  |  "
+                "선택 컬럼: `won`, `weight`, `workdays`"
+            )
+            data_csv = st.file_uploader("데이터 CSV", type=["csv"], key="data_csv")
+
+            data_rows: list[dict] = []
+            if data_csv is not None:
+                try:
+                    df_in = pd.read_csv(
+                        io.BytesIO(data_csv.read()),
+                        encoding="utf-8-sig",
+                        thousands=",",
+                    )
+                    df_in.columns = [c.strip().lower() for c in df_in.columns]
+                    for _, r in df_in.iterrows():
+                        data_rows.append({
+                            "period":   str(r.get("period", "")).strip(),
+                            "dollar":   float(r["dollar"])   if "dollar"   in r and pd.notna(r.get("dollar"))   else None,
+                            "won":      float(r["won"])      if "won"      in r and pd.notna(r.get("won"))      else None,
+                            "weight":   float(r["weight"])   if "weight"   in r and pd.notna(r.get("weight"))   else None,
+                            "workdays": int(r["workdays"])   if "workdays" in r and pd.notna(r.get("workdays")) else None,
+                        })
+                    st.success(f"{len(data_rows)}건 로드됨")
+                    st.dataframe(
+                        pd.DataFrame(data_rows),
+                        use_container_width=True,
+                        height=200,
+                        hide_index=True,
+                    )
+                except Exception as e:
+                    st.error(f"CSV 파싱 오류: {e}")
+
+            if st.button("✅ 새 시트 생성 및 파일 생성", type="primary", key="btn_new"):
+                if not new_sheet_name.strip():
+                    st.error("새 시트명을 입력하세요.")
+                elif not data_rows:
+                    st.error("데이터 CSV를 업로드하세요.")
+                else:
+                    wb_chk = openpyxl.load_workbook(io.BytesIO(xl_bytes2), read_only=True)
+                    already_exists = new_sheet_name.strip() in wb_chk.sheetnames
+                    wb_chk.close()
+                    if already_exists:
+                        st.error(f"이미 존재하는 시트명입니다: {new_sheet_name.strip()}")
+                    else:
+                        try:
+                            wb4 = openpyxl.load_workbook(io.BytesIO(xl_bytes2))
+                            add_new_sheet(
+                                wb4,
+                                new_sheet_name.strip(),
+                                template_sheet,
+                                company=company.strip(),
+                                hs_code=hs_code.strip(),
+                                data_rows=sorted(data_rows, key=lambda x: x["period"]),
+                            )
+                            out2 = io.BytesIO()
+                            wb4.save(out2)
+                            out2.seek(0)
+                            st.success(
+                                f"✅ '{new_sheet_name.strip()}' 시트 생성 완료 "
+                                f"({len(data_rows)}건)"
+                            )
+                            st.download_button(
+                                "⬇️ 수정된 Excel 다운로드",
+                                data=out2,
+                                file_name=xl_file2.name,
+                                mime=(
+                                    "application/vnd.openxmlformats-"
+                                    "officedocument.spreadsheetml.sheet"
+                                ),
+                                key="dl_new_sheet",
+                            )
+                        except Exception as e:
+                            st.error(f"오류 발생: {e}")
