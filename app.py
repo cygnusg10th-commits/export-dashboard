@@ -36,12 +36,15 @@ st.markdown("""
 .stMetric label { font-size: 12px; color: #718096; }
 div[data-testid="stSidebarContent"] { padding-top: 1rem; }
 
-/* Streamlit 하단 브랜딩 제거 */
-#MainMenu        { visibility: hidden; }
-footer           { visibility: hidden; }
-[data-testid="stToolbar"]      { visibility: hidden; }
-[data-testid="stDecoration"]   { display: none; }
-[data-testid="stStatusWidget"] { visibility: hidden; }
+/* Streamlit 하단 브랜딩 완전 제거 */
+#MainMenu                        { visibility: hidden; }
+footer                           { visibility: hidden; }
+header                           { visibility: hidden; }
+[data-testid="stToolbar"]        { display: none !important; }
+[data-testid="stDecoration"]     { display: none !important; }
+[data-testid="stStatusWidget"]   { display: none !important; }
+[class*="viewerBadge"]           { display: none !important; }
+[class*="styles_viewerBadge"]    { display: none !important; }
 </style>
 """, unsafe_allow_html=True)
 
