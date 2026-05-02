@@ -1,0 +1,16 @@
+# Excel 원본 (절대 커밋 금지)
+*.xlsx
+*.xls
+
+# 방문자 DB (서버에서 자체 생성)
+visitors.db
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.env
+
+# 로그
+*.log
+streamlit.log
