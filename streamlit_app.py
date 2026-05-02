@@ -351,66 +351,36 @@ with st.sidebar:
         st.info("데이터가 없습니다.")
         st.stop()
 
-    items_df  = load_items()
-    mom_map   = dict(zip(summary_df["sheet_name"], summary_df["mom"]))
-    co_map    = dict(zip(items_df["sheet_name"], items_df["company"].fillna("")))
+    items_df = load_items()
+    mom_map  = dict(zip(summary_df["sheet_name"], summary_df["mom"]))
+    co_map   = dict(zip(items_df["sheet_name"], items_df["company"].fillna("")))
+    all_names = items_df["sheet_name"].tolist()
 
-    # 전체 옵션 목록: (표시 레이블, 실제 sheet_name) 쌍으로 구성
-    def make_options(name_list):
-        opts = []
-        for n in name_list:
-            mom  = mom_map.get(n)
-            icon = mom_icon(mom)
-            pct  = f"{fmt_pct(mom)}" if mom is not None and not pd.isna(mom) else "  -  "
-            co   = co_map.get(n, "")
-            co_str = f"  [{co}]" if co else ""
-            opts.append((f"{icon} {pct}  {n}{co_str}", n))
-        return opts
+    def item_label(n):
+        mom    = mom_map.get(n)
+        icon   = mom_icon(mom)
+        pct    = fmt_pct(mom) if mom is not None and not pd.isna(mom) else " - "
+        co     = co_map.get(n, "")
+        co_str = f" [{co}]" if co else ""
+        return f"{icon} {pct}  {n}{co_str}"
 
     selected_item = None
 
     if view == "🔍 종목별 상세":
-        st.markdown(
-            "<p style='font-size:12px; color:#718096; margin-bottom:4px;'>종목 검색 · 선택</p>",
-            unsafe_allow_html=True,
-        )
-        # 검색어로 실시간 필터
-        keyword = st.text_input(
-            "검색", placeholder="종목명 또는 기업명 입력…",
+        st.caption("종목 선택 — 클릭 후 바로 타이핑해 검색")
+        prev      = st.session_state.get("selected")
+        def_idx   = all_names.index(prev) if prev in all_names else 0
+        selected_item = st.selectbox(
+            "종목 선택",
+            all_names,
+            index=def_idx,
+            format_func=item_label,
             label_visibility="collapsed",
-            key="item_search",
         )
-        kw = keyword.strip().lower()
-        filtered = [
-            n for n in items_df["sheet_name"].tolist()
-            if kw in n.lower() or kw in co_map.get(n, "").lower()
-        ] if kw else items_df["sheet_name"].tolist()
-
-        if not filtered:
-            st.warning("검색 결과 없음")
-        else:
-            opts = make_options(filtered)
-            labels = [o[0] for o in opts]
-            values = [o[1] for o in opts]
-
-            # 이전에 선택된 항목을 기본값으로 유지
-            prev = st.session_state.get("selected")
-            default_idx = values.index(prev) if prev in values else 0
-
-            pick_idx = st.selectbox(
-                "종목 선택",
-                range(len(labels)),
-                format_func=lambda i: labels[i],
-                index=default_idx,
-                label_visibility="collapsed",
-            )
-            selected_item = values[pick_idx]
-            st.session_state["selected"] = selected_item
-
-            # 선택된 종목 기업명 표시
-            co = co_map.get(selected_item, "")
-            if co:
-                st.caption(f"🏢 {co}")
+        st.session_state["selected"] = selected_item
+        co = co_map.get(selected_item, "")
+        if co:
+            st.caption(f"🏢 {co}")
 
 
 # ─── 전체 현황 ────────────────────────────────────────────────────────────────
