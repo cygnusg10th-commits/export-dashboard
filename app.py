@@ -1295,7 +1295,11 @@ elif view == "📝 Excel 편집":
     st.title("📝 수출 정리 Excel 편집")
     st.caption("업로드 → 편집 → 다운로드  (파일은 서버에 저장되지 않습니다)")
 
-    tab_add, tab_new = st.tabs(["➕ 기존 시트 — 월 행 추가", "📄 새 시트 추가"])
+    tab_add, tab_new, tab_api = st.tabs([
+        "➕ 기존 시트 — 월 행 추가",
+        "📄 새 시트 추가",
+        "🤖 자동 업데이트 스크립트",
+    ])
 
     # ── Tab 1: 기존 시트 월 행 추가 ──────────────────────────────────────────
     with tab_add:
@@ -1500,3 +1504,54 @@ elif view == "📝 Excel 편집":
                             )
                         except Exception as e:
                             st.error(f"오류 발생: {e}")
+
+    # ── Tab 3: 자동 업데이트 스크립트 다운로드 ────────────────────────────────
+    with tab_api:
+        st.subheader("🤖 API 자동 업데이트 스크립트")
+        st.markdown("""
+공공데이터포털 **관세청_품목별 수출입실적(GW)** API를 이용해
+Excel 파일에 신규 월 데이터를 자동으로 추가하는 스크립트입니다.
+
+---
+
+**① API 키 발급** — [data.go.kr](https://www.data.go.kr) 접속
+&nbsp;&nbsp;&nbsp;&nbsp;검색창 → `관세청 품목별 수출입실적` → 활용신청 → 마이페이지 > 인증키 복사
+
+**② 패키지 설치**
+```
+pip install requests openpyxl schedule
+```
+
+**③ 스크립트 설정** — 파일 상단 3줄만 수정
+```python
+API_KEY    = "발급받은_인증키"
+EXCEL_PATH = r"C:\\경로\\주요품목별수출정리_5월.xlsx"
+RUN_DAYS   = (1, 11, 21)   # 매월 실행일
+```
+
+**④ 실행**
+```
+python export_updater.py test    # API 연결 확인
+python export_updater.py now     # 즉시 업데이트
+python export_updater.py         # 스케줄러 모드
+```
+
+---
+
+> ⚠️ **주의**: 이 API는 HS코드 기준 집계 데이터입니다.
+> 기업별(삼성전자·SK하이닉스 등) 시트는 HS코드가 없어 수동 업데이트가 필요합니다.
+        """)
+
+        script_path = Path(__file__).parent / "export_updater.py"
+        if script_path.exists():
+            script_bytes = script_path.read_bytes()
+            st.download_button(
+                "⬇️ export_updater.py 다운로드",
+                data=script_bytes,
+                file_name="export_updater.py",
+                mime="text/plain",
+                type="primary",
+                use_container_width=True,
+            )
+        else:
+            st.warning("export_updater.py 파일을 찾을 수 없습니다.")
