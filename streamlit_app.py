@@ -30,6 +30,12 @@ st.set_page_config(
 
 st.markdown("""
 <style>
+    [data-testid="stAppViewerBadge"] { display: none !important; }
+</style>
+""", unsafe_allow_html=True)
+
+st.markdown("""
+<style>
 [data-testid="metric-container"] {
     background: #1a1f2e; border-radius: 8px; padding: 12px;
 }
